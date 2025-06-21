@@ -11,9 +11,11 @@ import { Checkbox } from '@/components/ui/checkbox.jsx'
 import { Separator } from '@/components/ui/separator.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx'
-import { Calculator, Download, Edit3, DollarSign, Calendar, Clock, Settings, Percent, FileText } from 'lucide-react'
+import { Calculator, Download, Edit3, DollarSign, Calendar, Clock, Settings, Percent, FileText, Save } from 'lucide-react'
 import { calculateQuote, formatPrice, generateProjectSummary } from '@/pricing.js'
 import { RegionSelector } from '@/components/ui/RegionSelector.jsx'
+import { useAuth } from '@/contexts/AuthContext'
+import { saveQuote } from '@/firebase/firestore'
 
 
 const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
@@ -22,11 +24,18 @@ const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
   const [editOptionsMode, setEditOptionsMode] = useState(false)
   const [editedFormData, setEditedFormData] = useState(formData)
   const [discount, setDiscount] = useState({ type: 'none', value: 0 })
-  const quoteRef = useRef(null)
+  //const quoteRef = useRef(null)
 
+  const { user, isAuthenticated } = useAuth()
+  const [saving, setSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+
+  const quoteSerialized = JSON.stringify(editedQuote)
+  
   const memoizedDoc = useMemo(
     () => <QuotePdf formData={editedFormData} quote={editedQuote} />,
-    [editedFormData, editedQuote]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editedFormData, quoteSerialized, editedQuote]
   )
 
   const [pdfInstance] = usePDF({ document: memoizedDoc })
@@ -70,6 +79,33 @@ const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
   const handlePriceEditorCancel = () => {
     setEditMode(false)
   }
+
+  // Función para guardar presupuesto
+const handleSaveQuote = async () => {
+  if (!isAuthenticated) {
+    alert('Debes estar logueado para guardar presupuestos')
+    return
+  }
+
+  setSaving(true)
+  try {
+    const { error } = await saveQuote(user.uid, {
+      formData: editOptionsMode ? editedFormData : formData,
+      quote: editedQuote
+    })
+
+    if (error) {
+      alert('Error al guardar: ' + error)
+    } else {
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
+    }
+  } catch  {
+    alert('Error de conexión al guardar')
+  } finally {
+    setSaving(false)
+  }
+}
 
   const exportQuoteText = () => {
     const projectSummary = generateProjectSummary(editOptionsMode ? editedFormData : formData)
@@ -215,27 +251,156 @@ const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
   }
 
   return (
-    <div className="space-y-8 fade-in" ref={quoteRef}>
-      {/* Header */}
-      <div className="text-center">
-        <h2 className="text-3xl md:text-4xl font-bold gradient-text mb-4">Su Presupuesto Personalizado</h2>
-        <p className="text-gray-600 text-lg">Basado en sus necesidades específicas</p>
+    <div className="space-y-8">
+      {/* ✅ NUEVO: Header con botón de admin */}
+      <div className="flex justify-between items-center bg-white/80 backdrop-blur-sm rounded-lg p-4 shadow-md border border-gray-200">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">Presupuesto Generado</h2>
+          <p className="text-gray-600 text-sm">
+            {formData.businessName ? `para ${formData.businessName}` : 'Proyecto web personalizado'}
+          </p>
+        </div>
+        
+        {/* Botón de admin solo para usuarios logueados */}
+        {isAuthenticated && (
+          <a href="/dashboard">
+            <Button 
+              className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+            >
+              <Settings className="w-4 h-4 mr-2" />
+              Panel de Admin
+            </Button>
+          </a>
+        )}
+        
+        {/* Enlace discreto al login para usuarios no logueados */}
+        {!isAuthenticated && (
+          <a 
+            href="/login" 
+            className="text-blue-600 hover:text-blue-800 text-sm font-medium bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 transition-all duration-200"
+          >
+            Acceso Admin
+          </a>
+        )}
       </div>
-
-      {/* Region + IRPF */}
-      <RegionSelector
-        region={editedFormData.region}
-        onChange={val => handleOptionEdit('region', val)}
-      />
-      <div className="flex items-center gap-2">
-        <Label>IRPF (%):</Label>
-        <Input
-          type="number"
-          value={(editedFormData.irpf * 100).toFixed(0)}
-          onChange={e => handleOptionEdit('irpf', parseFloat(e.target.value) / 100)}
-          className="w-20"
-        />
-      </div>
+  
+      {/* ✅ NUEVO: Selects de IRPF e IVA mejorados */}
+      <Card className="shadow-lg border-0 bg-gradient-to-r from-gray-50 to-blue-50">
+        <CardHeader className="bg-gradient-to-r from-gray-600 to-gray-700 text-white">
+          <CardTitle className="flex items-center gap-2">
+            <Calculator className="w-5 h-5" />
+            Configuración Fiscal
+          </CardTitle>
+          <CardDescription className="text-gray-200">
+            Ajusta los impuestos según tu situación
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Selector de Región (IVA/IGIC) */}
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                Región (Impuestos)
+              </Label>
+              <Select
+                value={editedFormData.region}
+                onValueChange={v => handleOptionEdit('region', v)}
+              >
+                <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-400 focus:border-blue-500 transition-colors bg-white shadow-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white border shadow-lg">
+                  <SelectItem value="peninsula" className="hover:bg-blue-50">
+                    <div className="flex items-center gap-3">
+                      <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+                      <div>
+                        <div className="font-medium">Península</div>
+                        <div className="text-xs text-gray-500">IVA 21%</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="canarias" className="hover:bg-blue-50">
+                    <div className="flex items-center gap-3">
+                      <span className="w-3 h-3 bg-orange-500 rounded-full"></span>
+                      <div>
+                        <div className="font-medium">Canarias</div>
+                        <div className="text-xs text-gray-500">IGIC 7%</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+  
+            {/* Selector de IRPF */}
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
+                Retención IRPF
+              </Label>
+              <Select
+                value={editedFormData.irpf?.toString()}
+                onValueChange={v => handleOptionEdit('irpf', Number(v))}
+              >
+                <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-purple-400 focus:border-purple-500 transition-colors bg-white shadow-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white border shadow-lg">
+                  <SelectItem value="0" className="hover:bg-purple-50">
+                    <div className="flex items-center gap-3">
+                      <span className="w-3 h-3 bg-gray-400 rounded-full"></span>
+                      <div>
+                        <div className="font-medium">Sin retención</div>
+                        <div className="text-xs text-gray-500">0% IRPF</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="15" className="hover:bg-purple-50">
+                    <div className="flex items-center gap-3">
+                      <span className="w-3 h-3 bg-yellow-500 rounded-full"></span>
+                      <div>
+                        <div className="font-medium">Retención estándar</div>
+                        <div className="text-xs text-gray-500">15% IRPF</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="21" className="hover:bg-purple-50">
+                    <div className="flex items-center gap-3">
+                      <span className="w-3 h-3 bg-red-500 rounded-full"></span>
+                      <div>
+                        <div className="font-medium">Retención alta</div>
+                        <div className="text-xs text-gray-500">21% IRPF</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          {/* Información fiscal */}
+          <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-start gap-2">
+              <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-white text-xs">i</span>
+              </div>
+              <div className="text-sm text-blue-800">
+                <p className="font-medium mb-1">Configuración actual:</p>
+                <p>
+                  {editedFormData.region === 'peninsula' ? 'IVA 21%' : 'IGIC 7%'} • 
+                  IRPF {editedFormData.irpf || 0}%
+                </p>
+                {editedFormData.irpf > 0 && (
+                  <p className="text-xs mt-1 text-blue-600">
+                    Los precios mostrados incluyen la retención del IRPF
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Tu Resumen del Proyecto + Options Editor (sin alterar clases) */}
         <Card className="card-hover shadow-lg border-0 bg-white/90 backdrop-blur-sm">
@@ -636,15 +801,46 @@ const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
           </Button>
         )
       }
-        
-        <Button 
+        {isAuthenticated && (
+          <Button 
+            onClick={handleSaveQuote}
+            disabled={saving}
+            className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white transition-all duration-200"
+          >
+            {saving ? (
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Guardando...
+              </div>
+            ) : saveSuccess ? (
+              <div className="flex items-center gap-2">
+                ✓ Guardado
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Save className="w-4 h-4" />
+                Guardar Presupuesto
+              </div>
+            )}
+          </Button>
+        )}
+
+        {!isAuthenticated && (
+          <a href="/login">
+            <Button variant="outline" className="px-6 py-3 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200">
+              <Save className="w-4 h-4 mr-2" />
+              Login para Guardar
+            </Button>
+          </a>
+        )}
+        {/* <Button 
           variant="outline" 
           onClick={exportQuoteText} 
           className="px-6 py-3 hover:bg-gray-50 transition-all duration-200"
         >
           <FileText className="w-4 h-4 mr-2" />
           Descargar TXT
-        </Button>
+        </Button> */}
       </div>
     </div>
   )
