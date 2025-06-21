@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import {  usePDF } from '@react-pdf/renderer'
 import { QuotePdf } from '@/components/QuotePdf.jsx'
+import PriceEditor from '@/components/PriceEditor.jsx'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { optionLists, fieldLabels } from '@/constants.js'
 import { Button } from '@/components/ui/button.jsx'
@@ -11,7 +12,7 @@ import { Separator } from '@/components/ui/separator.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx'
 import { Calculator, Download, Edit3, DollarSign, Calendar, Clock, Settings, Percent, FileText } from 'lucide-react'
-import { calculateQuote, formatPrice, generateProjectSummary } from '../pricing.js'
+import { calculateQuote, formatPrice, generateProjectSummary } from '@/pricing.js'
 import { RegionSelector } from '@/components/ui/RegionSelector.jsx'
 
 
@@ -35,13 +36,6 @@ const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
   useEffect(() => {
     setEditedQuote(calculateQuote(editedFormData))
   }, [editedFormData])
-
-  const handlePriceEdit = (section, index, newPrice) => {
-    const updated = { ...editedQuote }
-    updated[section].items[index].price = parseFloat(newPrice) || 0
-    updated[section].total = updated[section].items.reduce((sum, i) => sum + i.price, 0)
-    setEditedQuote(updated)
-  }
 
   const handleOptionEdit = (field, value) => {
     setEditedFormData(prev => ({
@@ -67,13 +61,13 @@ const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
       : Math.max(0, total - discount.value)
   }
 
-  const saveEdits = () => {
+  const handlePriceEditorSave = (newQuote) => {
+    setEditedQuote(newQuote)
     setEditMode(false)
-    onEditPrices(editedQuote)
+    onEditPrices(newQuote)
   }
 
-  const cancelEdits = () => {
-    setEditedQuote(quote)
+  const handlePriceEditorCancel = () => {
     setEditMode(false)
   }
 
@@ -205,6 +199,20 @@ const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
     { key: 'annual', label: fieldLabels.annualCosts, descKey: 'annualDescription', icon: <Clock className="w-5 h-5" />, gradient: 'from-orange-500 to-red-500' }
   ]
 
+  // Si estamos en modo de edición de precios, mostrar el editor
+  if (editMode) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-6xl mx-auto px-4">
+          <PriceEditor
+            quote={editedQuote}
+            onSave={handlePriceEditorSave}
+            onCancel={handlePriceEditorCancel}
+          />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8 fade-in" ref={quoteRef}>
@@ -228,35 +236,6 @@ const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
           className="w-20"
         />
       </div>
-
-      {/* Edit Prices */}
-      {editMode && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {sections.map(({ key }) => (
-            <Card key={key} className="bg-white">
-              <CardHeader>
-                <CardTitle>Edit {fieldLabels[key]}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {editedQuote[key].items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between mb-4">
-                    <span>{item.name}</span>
-                    <Input
-                      value={item.price}
-                      onChange={e => handlePriceEdit(key, idx, e.target.value)}
-                      className="w-24"
-                    />
-                  </div>
-                ))}
-                <div className="flex space-x-2 mt-4">
-                  <Button onClick={saveEdits}>Guardar Precios</Button>
-                  <Button variant="outline" onClick={cancelEdits}>Cancelar</Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
 
       {/* Tu Resumen del Proyecto + Options Editor (sin alterar clases) */}
         <Card className="card-hover shadow-lg border-0 bg-white/90 backdrop-blur-sm">
@@ -467,10 +446,10 @@ const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
             <CardHeader className={`cost-panel-header bg-gradient-to-r ${gradient} text-white rounded-t-lg`}>
               <CardTitle className="flex items-center gap-3">
                 <div className="p-2 bg-white/20 rounded-lg">{icon}</div>
-                {label}
+                {label} 
               </CardTitle>
               <CardDescription className="text-white/70">
-                {fieldLabels[descKey]}
+                {fieldLabels[descKey]} 
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6">
@@ -630,21 +609,14 @@ const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
           Volver al Formulario
         </Button>
         
-        {editMode ? (
-          <>
-            <Button onClick={saveEdits} className="btn-primary px-6 py-3 text-white border-0">
-              Guardar Cambios
-            </Button>
-            <Button variant="outline" onClick={cancelEdits} className="px-6 py-3 hover:bg-gray-50 transition-all duration-200">
-              Cancelar
-            </Button>
-          </>
-        ) : (
-          <Button variant="outline" onClick={() => setEditMode(true)} className="px-6 py-3 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200">
-            <Edit3 className="w-4 h-4 mr-2" />
-            Ajustar Precios
-          </Button>
-        )}
+        <Button 
+          variant="outline" 
+          onClick={() => setEditMode(true)} 
+          className="px-6 py-3 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200"
+        >
+          <Edit3 className="w-4 h-4 mr-2" />
+          Editor de Precios Avanzado
+        </Button>
 
         {pdfInstance.error && (
        <div className="text-red-500">Error generando PDF: {pdfInstance.error.message}</div>
@@ -653,6 +625,7 @@ const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
         ? (
           <a href={pdfInstance.url} download={`presupuesto-web-${new Date().toLocaleDateString('es-ES').replace(/\//g,'-')}.pdf`}>
             <Button className="btn-primary px-6 py-3 text-white border-0">
+              <Download className="w-4 h-4 mr-2" />
               Descargar PDF
             </Button>
           </a>
@@ -669,7 +642,7 @@ const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
           onClick={exportQuoteText} 
           className="px-6 py-3 hover:bg-gray-50 transition-all duration-200"
         >
-          <Download className="w-4 h-4 mr-2" />
+          <FileText className="w-4 h-4 mr-2" />
           Descargar TXT
         </Button>
       </div>
@@ -678,4 +651,3 @@ const QuoteDisplay = ({ formData, quote, onBack, onEditPrices }) => {
 }
 
 export default QuoteDisplay
-

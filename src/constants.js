@@ -27,7 +27,10 @@ export const fieldLabels = {
   hostingType: 'Tipo de hosting',
   seoLevel: 'Nivel de SEO',
   ecommerceFeatures: 'Funcionalidades de tienda',
-  region: 'Región para impuestos'
+  region: 'Región para impuestos',
+  oneTimeCosts: 'Costes Únicos',
+  monthlyCosts: 'Costes Mensuales',
+  annualCosts: 'Costes Anuales',
 };
 
 
