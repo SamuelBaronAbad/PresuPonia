@@ -13,7 +13,6 @@ import { Badge } from '@/components/ui/badge.jsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx'
 import { Calculator, Download, Edit3, DollarSign, Calendar, Clock, Settings, Percent, FileText, Save } from 'lucide-react'
 import { calculateQuote, formatPrice, generateProjectSummary } from '@/pricing.js'
-import { RegionSelector } from '@/components/ui/RegionSelector.jsx'
 import { useAuth } from '@/contexts/AuthContext'
 import { saveQuote } from '@/firebase/firestore'
 
